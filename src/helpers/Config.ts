@@ -13,6 +13,7 @@ const getConfig = async (): Promise<Config> => {
   const servers = process.env.OLLAMA.split(',').map((url) => ({ url: new URL(url), available: true }));
   const channels = process.env.CHANNELS.split(',');
   const token = process.env.TOKEN;
+  const botUserID = process.env.BOT_USER_ID;
 
   if (servers.length == 0) throw new Error('No servers available');
 
@@ -46,6 +47,7 @@ const getConfig = async (): Promise<Config> => {
     requiresMention,
     token,
     production,
+    botUserID,
   };
 };
 

@@ -16,4 +16,5 @@ export type Config = {
   requiresMention: boolean;
   token: string;
   production: boolean;
+  botUserID: string;
 };

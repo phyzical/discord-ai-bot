@@ -11,5 +11,5 @@ export const JSONMessage = (str: string): string =>
     })
     .join('\n');
 
-export const env = (str: string): string | null =>
-  typeof str === 'string' ? JSONMessage(str).replace(/<date>/gi, new Date().toUTCString()) : null;
+export const env = (str: string): string =>
+  typeof str === 'string' ? JSONMessage(str).replace(/<date>/gi, new Date().toUTCString()) : '';

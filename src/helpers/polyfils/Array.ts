@@ -12,12 +12,23 @@ const shuffle = (): void => {
   });
 };
 
+const last = (): void => {
+  Object.defineProperty(Array.prototype, 'last', {
+    // eslint-disable-next-line no-restricted-syntax
+    value: function () {
+      return this[this.length - 1];
+    },
+  });
+};
+
 export const initArrayPolyfills = (): void => {
   shuffle();
+  last();
 };
 
 declare global {
   interface Array<T> {
     shuffle(): Array<T>;
+    last(): T;
   }
 }

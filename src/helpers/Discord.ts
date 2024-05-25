@@ -1,4 +1,14 @@
-import { Message } from 'discord.js';
+import {
+  DMChannel,
+  Message,
+  NewsChannel,
+  PartialDMChannel,
+  PrivateThreadChannel,
+  PublicThreadChannel,
+  StageChannel,
+  TextChannel,
+  VoiceChannel,
+} from 'discord.js';
 import { splitText } from './Polyfils.js';
 
 export const pingReply = async (message: Message): Promise<void> => {
@@ -9,13 +19,32 @@ export const pingReply = async (message: Message): Promise<void> => {
   await reply.edit({ content: `Ping: ${difference}ms` });
 };
 
-export const replySplitMessage = async (replyMessage: Message, content: string): Promise<Message[]> => {
+export const sendSplitReplyMessage = async (replyMessage: Message, content: string): Promise<Message[]> => {
   const responseMessages = splitText(content, 2000).map((content: string) => ({ content }));
 
-  const replyMessages = [];
+  const messages = [];
   for (let i = 0; i < responseMessages.length; ++i)
-    if (i == 0) replyMessages.push(await replyMessage.reply(responseMessages[i]));
-    else replyMessages.push(await replyMessage.channel.send(responseMessages[i]));
+    if (i == 0) messages.push(await replyMessage.reply(responseMessages[i]));
+    else messages.push(await replyMessage.channel.send(responseMessages[i]));
 
-  return replyMessages;
+  return messages;
+};
+
+export const sendSplitChannelMessage = async (
+  messageChannel:
+    | DMChannel
+    | PartialDMChannel
+    | NewsChannel
+    | StageChannel
+    | TextChannel
+    | PrivateThreadChannel
+    | PublicThreadChannel
+    | VoiceChannel,
+  content: string
+): Promise<Message[]> => {
+  const responseMessages = splitText(content, 2000).map((content: string) => ({ content }));
+  const messages = [];
+  for (let i = 0; i < responseMessages.length; ++i) messages.push(messageChannel.send(responseMessages[i]));
+
+  return messages;
 };

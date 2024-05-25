@@ -3,7 +3,11 @@ import { config } from './helpers/Config.js';
 import { post } from './helpers/Requests.js';
 import { logDebug, logError } from './helpers/Log.js';
 import { init } from './helpers/polyfils/All.js';
-import { pingReply, replySplitMessage } from './helpers/Discord.js';
+import { pingReply, sendSplitChannelMessage, sendSplitReplyMessage } from './helpers/Discord.js';
+
+type AiMessage = Message & {
+  context: string;
+};
 
 init();
 const {
@@ -20,6 +24,7 @@ const {
   token,
   model,
   randomServer,
+  botUserID,
 } = config;
 
 export const client = new Client({
@@ -39,7 +44,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({ activities: [], status: 'online' });
 });
 
-const messages = {};
+const messages = {} as AiMessage[];
 
 client.on(Events.MessageCreate, async (message: Message) => {
   let typing = false;
@@ -53,6 +58,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
       type,
     } = message;
     const { id: channelID } = messageChannel;
+    if (!messages[channelID]) messages[channelID] = [];
     const { channels: guildChannels, members: guildMembers } = guild;
     let channelName = 'N/A';
     if ('name' in messageChannel) channelName = messageChannel.name;
@@ -71,11 +77,10 @@ client.on(Events.MessageCreate, async (message: Message) => {
     if (guild && !channels.includes(channelID)) return;
 
     // return if user is a bot, or non-default message
-    if (!authorID) return;
-    if (authorBot || authorID == userID) return;
+    if (!authorID || authorID == userID) return;
 
     // RegExp to match a mention for the bot
-    const myMention = new RegExp(`<@((!?${userID}${botRole ? `)|(&${botRole.id}` : ''}))>`, 'g');
+    const myMentionRegex = new RegExp(`<@((!?${userID}${botRole ? `)|(&${botRole.id}` : ''}))>`, 'g');
 
     if (typeof content !== 'string' || content.length == 0) return;
 
@@ -84,8 +89,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
       const reply = await message.fetchReference();
       if (!reply) return;
       if (reply.author.id != userID) return;
-      if (messages[channelID] == null) return;
-      if ((context = messages[channelID][reply.id]) == null) return;
+      if (messages[channelID].length == 0) return;
+      if ((context = messages[channelID].find((x) => x.id == reply.id)) == null) return;
     } else if (type != MessageType.Default) return;
 
     const systemMessages = [];
@@ -98,7 +103,27 @@ client.on(Events.MessageCreate, async (message: Message) => {
     const systemMessage = systemMessages.join('\n\n');
 
     // deal with commands first before passing to LLM
-    let userInput = content.replace(new RegExp('^s*' + myMention.source, ''), '').trim();
+    let userInput = content.replace(new RegExp('^s*' + myMentionRegex.source, ''), '').trim();
+
+    const initialRegex = /talk to <@!?([0-9]+)>/g;
+    const initialAskAnotherBotRef = userInput.match(initialRegex);
+    let anotherBotRefID = '';
+    if (initialAskAnotherBotRef) anotherBotRefID = initialRegex.exec(content)[1];
+
+    // don't respond if your the bot about to be talked to
+    if (anotherBotRefID == botUserID) return;
+
+    const followUpRegex = /talking to <@!?([0-9]+)>/g;
+    const followUpAskAnotherBotRef = userInput.match(followUpRegex);
+    if (followUpAskAnotherBotRef) anotherBotRefID = authorID;
+
+    userInput = content
+      .replace(new RegExp(/<*@([0-9A-Za-z]+)>*/g), '')
+      .replace(new RegExp(/talk(ing)* to /g), '')
+      .trim();
+
+    // only when author is bot and there is another bot we care about
+    if (authorBot && anotherBotRefID == null) return;
 
     // may change this to slash commands in the future
     // i'm using regular text commands currently because the bot interacts with text content anyway
@@ -110,7 +135,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
         case 'clear':
           if (messages[channelID] != null) {
             // reset conversation
-            const cleared = messages[channelID].amount;
+            const cleared = messages[channelID].length;
 
             // clear
             delete messages[channelID];
@@ -135,7 +160,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
           });
           break;
         case 'system':
-          await replySplitMessage(message, `System message:\n\n${systemMessage}`);
+          await sendSplitReplyMessage(message, `System message:\n\n${systemMessage}`);
           break;
         case 'ping':
           // get ms difference
@@ -151,7 +176,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
       return;
     }
 
-    if (message.type == MessageType.Default && requiresMention && guild && !content.match(myMention)) return;
+    if (message.type == MessageType.Default && requiresMention && guild && !content.match(myMentionRegex)) return;
 
     if (message.guild) {
       await guildChannels.fetch();
@@ -159,7 +184,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
     }
 
     userInput = userInput
-      .replace(myMention, '')
+      .replace(myMentionRegex, '')
       .replace(/<#([0-9]+)>/g, (_, id) => {
         if (guild) {
           const chn = guildChannels.cache.get(id);
@@ -182,11 +207,6 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
     if (userInput.length == 0) return;
 
-    // create conversation
-    if (messages[channelID] == null) messages[channelID] = { amount: 0, last: null };
-
-    logDebug(`Starting!`);
-
     // start typing
     typing = true;
     await messageChannel.sendTyping();
@@ -203,9 +223,9 @@ client.on(Events.MessageCreate, async (message: Message) => {
     let response;
     try {
       // context if the message is not a reply
-      if (context == null) context = messages[channelID].last;
+      if (context == null) context = messages[channelID].last?.context;
 
-      if (useInitialPrompt && messages[channelID].amount == 0) {
+      if (useInitialPrompt && messages[channelID].length == 0) {
         userInput = `${initialPrompt}\n\n${userInput}`;
         logDebug('Adding initial prompt to message');
       }
@@ -251,19 +271,32 @@ client.on(Events.MessageCreate, async (message: Message) => {
     logDebug(`Response: ${responseText}`);
 
     const prefix =
-      showStartOfConversation && messages[channelID].amount == 0
+      showStartOfConversation && messages[channelID].length == 0
         ? '> This is the beginning of the conversation, type `.help` for help.\n\n'
         : '';
 
-    // reply (will automatically stop typing)
-    const replyMessageIDs = (await replySplitMessage(message, `${prefix}${responseText}`)).map((msg) => msg.id);
-
-    // add response to conversation
     context = response.filter((e) => e.done && e.context)[0].context;
-    for (let i = 0; i < replyMessageIDs.length; ++i) messages[channelID][replyMessageIDs[i]] = context;
 
-    messages[channelID].last = context;
-    ++messages[channelID].amount;
+    // TODO workout if were looping and early out?
+    const allContent = messages[channelID].map((x) => x.content).filter((x) => x);
+    const duplicates = allContent.filter((item, index) => allContent.indexOf(item) !== index);
+
+    if (duplicates.length > 0) {
+      logDebug(`Duplicates found are ${JSON.stringify(duplicates)}`);
+      messages[channelID].push({
+        ...(await messageChannel.send(`Okay were going around in circles stopping....`)),
+        context,
+      });
+    } else if (anotherBotRefID)
+      messages[channelID].push(
+        ...(
+          await sendSplitChannelMessage(messageChannel, `talking to <@${anotherBotRefID}> ${prefix}${responseText}`)
+        ).map((x) => ({ ...x, context }))
+      );
+    else
+      messages[channelID].push(
+        ...(await sendSplitReplyMessage(message, `${prefix}${responseText}`)).map((x) => ({ ...x, context }))
+      );
   } catch (error) {
     if (typing)
       try {

@@ -1,11 +1,13 @@
 import { AxiosError } from 'axios';
 import { Logger, LogLevel } from 'meklog';
 
-export const log = new Logger(false, 'Generic logs');
-// process.on('message', (data: Client) => {
-//   if (data.shardID) client.shardID = data.shardID;
-//   if (data.logger) log = new Logger(data.logger);
-// });
+const log = new Logger(false, 'Generic logs');
+
+const timestamp = (): string => {
+  const date = new Date();
+
+  return `[${date.toLocaleDateString()} ${date.toLocaleTimeString()}]`;
+};
 
 export const logError = (error: Error | AxiosError): void => {
   let str = error as unknown as string;
@@ -16,9 +18,9 @@ export const logError = (error: Error | AxiosError): void => {
       `${error.request.path}`;
     if (error.response.data?.error) str += ': ' + error.response.data.error;
   }
-  log(LogLevel.Error, str);
+  log(LogLevel.Error, `${timestamp()} ${str}`);
 };
 
-export const logDebug = (msg: string): void => {
-  log(LogLevel.Debug, msg);
+export const logDebug = (str: string): void => {
+  log(LogLevel.Debug, `${timestamp()} ${str}`);
 };
