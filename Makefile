@@ -18,10 +18,15 @@ compose-down:
 
 #  Run the local node project with make and without docker
 local:
-	$(MAKE) setup_env && npm i && node ./src/index.js
+	$(MAKE) setup_env && npm i && npm run build && node ./index.js
 
 # This copies the .env.example (source) file to the .env (destination) file location
 # The -n or no clobber means it will not overwrite the .env file if it already exists.
 # The || : basically ignores the error code of the previous command and always succeeds.
 setup_env:
 	cp -n ./.env.example ./.env 2>/dev/null || :
+
+docker-build:
+	docker build --platform linux/amd64 . -t phyzical/discord-ai-bot --no-cache
+docker-push:
+	docker push phyzical/discord-ai-bot

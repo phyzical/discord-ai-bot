@@ -6,11 +6,14 @@
 </div>
 
 ### Archived
+
 I have decided to archive this project as I no longer have the time to maintain it. If you would like to take over the project, [please let me know](https://github.com/mekb-turtle).
 
 ### Set-up instructions
-1. Install [Node.js](https://nodejs.org) (if you have a package manager, use that instead to install this)
-    - Make sure to install at least v14 of Node.js
+
+1. Install nvm
+    - nvm use
+    OR just use node 20
 2. Install [Ollama](https://github.com/jmorganca/ollama) (ditto)
 3. Pull (download) a model, e.g `ollama pull orca` or `ollama pull llama2`
 4. Start Ollama by running `ollama serve`
@@ -32,10 +35,13 @@ I have decided to archive this project as I no longer have the time to maintain 
         1. In Discord, go to User Settings » Advanced, and enable Developer Mode
         2. Right click on a channel you want to use, and click Copy Channel ID
     - You can edit the system message the bot uses, or disable it entirely
-8. Start the bot with `npm start`
-9. You can interact with the bot by @mentioning it with your message
+8. npm install
+9. npm build
+10. Start the bot with `npm start`
+11. You can interact with the bot by @mentioning it with your message
 
 ### Set-up instructions with Docker
+
 1. Install [Docker](https://docs.docker.com/get-docker/)
    - Should be atleast compatible with version 3 of compose (docker engine 1.13.0+)
 2. Repeat steps 2—7 from the other setup instructions
