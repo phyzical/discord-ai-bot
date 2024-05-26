@@ -188,6 +188,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
       content,
       type,
     } = message;
+    logDebug(`Message Received!`);
+
     const { id: channelID } = messageChannel;
     if (!messages[channelID]) messages[channelID] = [];
     const { channels: guildChannels, members: guildMembers } = guild;
@@ -230,16 +232,10 @@ client.on(Events.MessageCreate, async (message: Message) => {
     //  theres a bug here?
     // check if were stating a talk to session
     if (content.match(regexps.botTalkingFull)) talkingBotRefID = regexps.botTalkingFull.exec(content)[1];
-
-    logDebug(talkingBotRefID);
-
     // don't respond if your the bot being talked to and a bot didn't say it
-    if (talkingBotRefID == botUserID && !authorBot) return;
-    logDebug(talkingBotRefID);
-
+    if (talkingBotRefID != '' && talkingBotRefID == botUserID && !authorBot) return;
     // when author is bot and talk matches then use author as its another bot
     if (authorBot && content.match(regexps.botTalkingFull)) talkingBotRefID = authorID;
-    logDebug(talkingBotRefID);
 
     const requestingImage = content.match(regexps.txt2img)?.length > 0;
 
@@ -333,13 +329,16 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
     const allContent = messages[channelID].map((x) => x.content).filter((x) => x);
     const duplicates = allContent.filter((item, index) => allContent.indexOf(item) !== index);
-    // TODO workout if were looping and early out?
     const botChatsCount = messages[channelID].filter((item) => item.botChats).length;
 
     if (duplicates.length > 0 || botChatsCount > botChatsCountLimit) {
-      logDebug(`Duplicates found are ${JSON.stringify(duplicates)}`);
+      const botResponseText =
+        duplicates.length > 0
+          ? `Okay were going around in circles stopping....`
+          : `Sorry we have hit our limit of ${botChatsCount} chats`;
+
       messages[channelID].push({
-        ...(await messageChannel.send(`Okay were going around in circles stopping....`)),
+        ...(await messageChannel.send(botResponseText)),
         context,
         botChats: false,
       });

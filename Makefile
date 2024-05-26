@@ -30,3 +30,6 @@ docker-build:
 	docker build  . -t phyzical/discord-ai-bot 
 docker-run:
 	docker run --rm  --env-file=.env phyzical/discord-ai-bot 
+docker-push:
+	docker build --platform linux/amd64 . -t phyzical/discord-ai-bot
+	docker push phyzical/discord-ai-bot
