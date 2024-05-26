@@ -10,6 +10,3 @@ export const JSONMessage = (str: string): string =>
       return result;
     })
     .join('\n');
-
-export const env = (str: string): string =>
-  typeof str === 'string' ? JSONMessage(str).replace(/<date>/gi, new Date().toUTCString()) : '';

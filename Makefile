@@ -27,6 +27,6 @@ setup_env:
 	cp -n ./.env.example ./.env 2>/dev/null || :
 
 docker-build:
-	docker build --platform linux/amd64 . -t phyzical/discord-ai-bot --no-cache
-docker-push:
-	docker push phyzical/discord-ai-bot
+	docker build  . -t phyzical/discord-ai-bot 
+docker-run:
+	docker run --rm  --env-file=.env phyzical/discord-ai-bot 

@@ -231,11 +231,15 @@ client.on(Events.MessageCreate, async (message: Message) => {
     // check if were stating a talk to session
     if (content.match(regexps.botTalkingFull)) talkingBotRefID = regexps.botTalkingFull.exec(content)[1];
 
+    logDebug(talkingBotRefID);
+
     // don't respond if your the bot being talked to and a bot didn't say it
     if (talkingBotRefID == botUserID && !authorBot) return;
+    logDebug(talkingBotRefID);
 
     // when author is bot and talk matches then use author as its another bot
     if (authorBot && content.match(regexps.botTalkingFull)) talkingBotRefID = authorID;
+    logDebug(talkingBotRefID);
 
     const requestingImage = content.match(regexps.txt2img)?.length > 0;
 

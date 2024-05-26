@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import process from 'process';
 import { Config } from '../types/Config.js';
-import { boolean, env } from './Parsers.js';
+import { boolean } from './Parsers.js';
 import { post } from './Requests.js';
 import { ModelInfo } from '../types/ModelInfo.js';
 import { Environment } from '../types/Environment.js';
@@ -44,17 +44,17 @@ const getConfig = async (): Promise<Config> => {
     model,
     servers,
     channels: CHANNELS.split(','),
-    customSystemMessage: env(SYSTEM),
+    customSystemMessage: SYSTEM || '',
     useModelSystemMessage: boolean(USE_MODEL_SYSTEM),
     showStartOfConversation: boolean(SHOW_START_OF_CONVERSATION),
     randomServer,
     modelInfo,
-    initialPrompt: env(INITIAL_PROMPT),
+    initialPrompt: INITIAL_PROMPT || '',
     requiresMention: boolean(REQUIRES_MENTION),
     token: TOKEN,
     production: NODE_ENV == 'prod' || NODE_ENV == 'production',
     botUserID: BOT_USER_ID,
-    botChatsCountLimit: parseInt(BOT_CHAT_COUNT_LIMIT) || 5,
+    botChatsCountLimit: parseInt(BOT_CHAT_COUNT_LIMIT || '5'),
   };
 };
 
