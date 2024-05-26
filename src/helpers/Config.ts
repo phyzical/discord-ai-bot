@@ -54,7 +54,7 @@ const getConfig = async (): Promise<Config> => {
     token: TOKEN,
     production: NODE_ENV == 'prod' || NODE_ENV == 'production',
     botUserID: BOT_USER_ID,
-    botChatsCountLimit: parseInt(BOT_CHAT_COUNT_LIMIT),
+    botChatsCountLimit: parseInt(BOT_CHAT_COUNT_LIMIT) || 5,
   };
 };
 
