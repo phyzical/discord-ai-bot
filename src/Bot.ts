@@ -237,7 +237,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
     // when author is bot and talk matches then use author as its another bot
     if (authorBot && content.match(regexps.botTalkingFull)) talkingBotRefID = authorID;
 
-    const requestingImage = content.match(regexps.txt2img).length > 0;
+    const requestingImage = content.match(regexps.txt2img)?.length > 0;
 
     // only when author is bot and there is another bot we care about
     if (authorBot && talkingBotRefID == null) return;
@@ -372,7 +372,6 @@ client.on(Events.MessageCreate, async (message: Message) => {
       } catch (ignored) {
         // ignored
       }
-
     logError(error);
   }
 });

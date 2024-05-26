@@ -20,6 +20,7 @@ export const logError = (error: Error | AxiosError): void => {
     if (error.response?.data?.error) str += ': ' + error.response?.data?.error;
   }
   log(LogLevel.Error, `${timestamp()} ${str}`);
+  log(LogLevel.Error, error.stack);
 };
 
 export const logDebug = (str: string): void => {
