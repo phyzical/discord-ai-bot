@@ -4,50 +4,57 @@ import { Config } from '../types/Config.js';
 import { boolean, env } from './Parsers.js';
 import { post } from './Requests.js';
 import { ModelInfo } from '../types/ModelInfo.js';
+import { Environment } from '../types/Environment.js';
 
 const getConfig = async (): Promise<Config> => {
   dotenv.config();
 
-  const production = process.env.NODE_ENV == 'prod' || process.env.NODE_ENV == 'production';
-  const model = process.env.MODEL;
-  const servers = process.env.OLLAMA.split(',').map((url) => ({ url: new URL(url), available: true }));
-  const channels = process.env.CHANNELS.split(',');
-  const token = process.env.TOKEN;
-  const botUserID = process.env.BOT_USER_ID;
+  const {
+    NODE_ENV,
+    MODEL,
+    OLLAMA,
+    CHANNELS,
+    TOKEN,
+    BOT_USER_ID,
+    SYSTEM,
+    USE_MODEL_SYSTEM,
+    SHOW_START_OF_CONVERSATION,
+    RANDOM_SERVER,
+    INITIAL_PROMPT,
+    REQUIRES_MENTION,
+    BOT_CHAT_COUNT_LIMIT,
+  } = process.env as unknown as Environment;
+  if (!BOT_USER_ID) throw 'Please provide bot token';
+  if (!MODEL) throw 'Please provide model';
+  if (!TOKEN) throw 'Please provide a token';
+  if (!OLLAMA) throw 'Please provide a server';
 
-  if (servers.length == 0) throw new Error('No servers available');
+  const servers = OLLAMA.split(',').map((url) => ({ url: new URL(url), available: true }));
+  const model = MODEL;
 
-  const customSystemMessage = env(process.env.SYSTEM);
-  const useCustomSystemMessage = boolean(process.env.USE_SYSTEM) && !!customSystemMessage;
-  const useModelSystemMessage = boolean(process.env.USE_MODEL_SYSTEM);
-  const showStartOfConversation = boolean(process.env.SHOW_START_OF_CONVERSATION);
-  const randomServer = boolean(process.env.RANDOM_SERVER);
+  const randomServer = boolean(RANDOM_SERVER);
   // fetch info about the model like the template and system message
   let modelInfo = (await post(servers, randomServer, '/api/show', {
     name: model,
   })) as ModelInfo;
   if (typeof modelInfo === 'string') modelInfo = JSON.parse(modelInfo) as ModelInfo;
   if (typeof modelInfo !== 'object') throw 'failed to fetch model information';
-  const initialPrompt = env(process.env.INITIAL_PROMPT);
-  const useInitialPrompt = boolean(process.env.USE_INITIAL_PROMPT) && !!initialPrompt;
-  const requiresMention = boolean(process.env.REQUIRES_MENTION);
 
   return {
     model,
     servers,
-    channels,
-    customSystemMessage,
-    useCustomSystemMessage,
-    useModelSystemMessage,
-    showStartOfConversation,
+    channels: CHANNELS.split(','),
+    customSystemMessage: env(SYSTEM),
+    useModelSystemMessage: boolean(USE_MODEL_SYSTEM),
+    showStartOfConversation: boolean(SHOW_START_OF_CONVERSATION),
     randomServer,
     modelInfo,
-    initialPrompt,
-    useInitialPrompt,
-    requiresMention,
-    token,
-    production,
-    botUserID,
+    initialPrompt: env(INITIAL_PROMPT),
+    requiresMention: boolean(REQUIRES_MENTION),
+    token: TOKEN,
+    production: NODE_ENV == 'prod' || NODE_ENV == 'production',
+    botUserID: BOT_USER_ID,
+    botChatsCountLimit: parseInt(BOT_CHAT_COUNT_LIMIT),
   };
 };
 

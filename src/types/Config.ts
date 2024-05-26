@@ -6,15 +6,14 @@ export type Config = {
   servers: Server[];
   channels: string[];
   customSystemMessage: string;
-  useCustomSystemMessage: boolean;
   useModelSystemMessage: boolean;
   showStartOfConversation: boolean;
   randomServer: boolean;
   modelInfo: ModelInfo;
   initialPrompt: string;
-  useInitialPrompt: boolean;
   requiresMention: boolean;
   token: string;
   production: boolean;
   botUserID: string;
+  botChatsCountLimit: number;
 };

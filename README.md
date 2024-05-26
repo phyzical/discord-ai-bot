@@ -40,6 +40,10 @@ I have decided to archive this project as I no longer have the time to maintain 
 10. Start the bot with `npm start`
 11. You can interact with the bot by @mentioning it with your message
 
+
+### ENVS/FLAGS
+please refer to [EnvironmentFlags](./src/types/Environment.ts)
+
 ### Set-up instructions with Docker
 
 1. Install [Docker](https://docs.docker.com/get-docker/)

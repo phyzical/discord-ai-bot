@@ -15,16 +15,15 @@ const {
   modelInfo,
   useModelSystemMessage,
   customSystemMessage,
-  useCustomSystemMessage,
   requiresMention,
   servers,
   showStartOfConversation,
   initialPrompt,
-  useInitialPrompt,
   token,
   model,
   randomServer,
   botUserID,
+  botChatsCountLimit,
 } = config;
 
 export const client = new Client({
@@ -46,6 +45,138 @@ client.once(Events.ClientReady, async () => {
 
 const messages = {} as AiMessage[];
 
+//  TODO: make / commands
+// client.once('ready', () => {
+//   // Register a new slash command
+//   client.guilds.cache.get('your-guild-id').commands.create({
+//     name: 'ping',
+//     description: 'Replies with Pong!',
+//   });
+// });
+
+// client.on('interactionCreate', async interaction => {
+//   if (!interaction.isCommand()) return;
+
+//   const { commandName } = interaction;
+
+//   if (commandName === 'ping') {
+//     await interaction.reply('Pong!');
+//   }
+// });
+
+const handleCommands = async (
+  userInput: string,
+  message: Message,
+  messages: Message[],
+  channelID: string,
+  systemMessage: string
+): Promise<void> => {
+  if (userInput.startsWith('.')) {
+    const args = userInput.substring(1).split(/\s+/g);
+    const cmd = args.shift();
+    switch (cmd) {
+      case 'reset':
+      case 'clear':
+        if (messages[channelID] != null) {
+          // reset conversation
+          const cleared = messages[channelID].length;
+
+          // clear
+          delete messages[channelID];
+
+          if (cleared > 0) {
+            await message.reply({ content: `Cleared conversation of ${cleared} messages` });
+            break;
+          }
+        }
+        await message.reply({ content: 'No messages to clear' });
+        break;
+      case 'help':
+      case '?':
+      case 'h':
+        await message.reply({
+          content: 'Commands:\n- `.reset` `.clear`\n- `.help` `.?` `.h`\n- `.ping`\n- `.model`\n- `.system`',
+        });
+        break;
+      case 'model':
+        await message.reply({
+          content: `Current model: ${model}`,
+        });
+        break;
+      case 'system':
+        await sendSplitReplyMessage(message, `System message:\n\n${systemMessage}`);
+        break;
+      case 'ping':
+        // get ms difference
+        await pingReply(message);
+        break;
+      case '':
+        break;
+      default:
+        await message.reply({ content: 'Unknown command, type `.help` for a list of commands' });
+        break;
+    }
+
+    return;
+  }
+};
+
+const regexMatch = (guildMembers): RegExp => {
+  const {
+    me: {
+      roles: { botRole },
+    },
+  } = guildMembers;
+
+  const {
+    user: { id: userID },
+  } = client;
+
+  return new RegExp(`<@((!?${userID}${botRole ? `)|(&${botRole.id}` : ''}))>`, 'g');
+};
+
+const regexps = {
+  atSymbols: /<*@([0-9A-Za-z]+)>*/g,
+  emojiMatcher: /<:([a-zA-Z0-9_]+):([0-9]+)>/g,
+  botTalking: /talk to /g,
+  txt2img: /txt2img/g,
+  channel: /<#([0-9]+)>/g,
+  botTalkingFull: /talk to <@!?([0-9]+)>/g,
+};
+
+const cleanInputText = (content: string, message: Message): string => {
+  const { guild } = message;
+  const { channels: guildChannels, members: guildMembers } = guild;
+  const myMentionRegex = regexMatch(guildMembers);
+
+  return (
+    content
+      // remove yourself from input
+      .replace(myMentionRegex, '')
+      // remove channel
+      .replace(regexps.channel, (_, id) => {
+        if (guild) {
+          const chn = guildChannels.cache.get(id);
+          if (chn) return `#${chn.name}`;
+        }
+
+        return '#unknown-channel';
+      })
+      .replace(regexps.atSymbols, '')
+      // convert emojis
+      .replace(regexps.emojiMatcher, (_, name) => `emoji:${name}:`)
+      // remove self again?
+      .replace(new RegExp('^s*' + myMentionRegex.source, ''), '')
+      // remove any @refs
+      .replace(regexps.emojiMatcher, '')
+      // remove the bot to bot triggers
+      .replace(regexps.botTalking, '')
+      // remove the txt2img trigger
+      .replace(regexps.txt2img, '')
+      .trim()
+  );
+};
+
 client.on(Events.MessageCreate, async (message: Message) => {
   let typing = false;
   try {
@@ -64,12 +195,6 @@ client.on(Events.MessageCreate, async (message: Message) => {
     if ('name' in messageChannel) channelName = messageChannel.name;
 
     const {
-      me: {
-        roles: { botRole },
-      },
-    } = guildMembers;
-
-    const {
       user: { id: userID },
     } = client;
 
@@ -79,8 +204,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
     // return if user is a bot, or non-default message
     if (!authorID || authorID == userID) return;
 
-    // RegExp to match a mention for the bot
-    const myMentionRegex = new RegExp(`<@((!?${userID}${botRole ? `)|(&${botRole.id}` : ''}))>`, 'g');
+    const myMentionRegex = regexMatch(guildMembers);
 
     if (typeof content !== 'string' || content.length == 0) return;
 
@@ -97,84 +221,30 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
     if (useModelSystemMessage && modelInfo.system) systemMessages.push(modelInfo.system);
 
-    if (useCustomSystemMessage) systemMessages.push(customSystemMessage);
+    if (customSystemMessage) systemMessages.push(customSystemMessage);
 
     // join them together
     const systemMessage = systemMessages.join('\n\n');
 
-    // deal with commands first before passing to LLM
-    let userInput = content.replace(new RegExp('^s*' + myMentionRegex.source, ''), '').trim();
+    let talkingBotRefID = '';
+    //  theres a bug here?
+    // check if were stating a talk to session
+    if (content.match(regexps.botTalkingFull)) talkingBotRefID = regexps.botTalkingFull.exec(content)[1];
 
-    const initialRegex = /talk to <@!?([0-9]+)>/g;
-    const initialAskAnotherBotRef = userInput.match(initialRegex);
-    let anotherBotRefID = '';
-    if (initialAskAnotherBotRef) anotherBotRefID = initialRegex.exec(content)[1];
+    // don't respond if your the bot being talked to and a bot didn't say it
+    if (talkingBotRefID == botUserID && !authorBot) return;
 
-    // don't respond if your the bot about to be talked to
-    if (anotherBotRefID == botUserID) return;
+    // when author is bot and talk matches then use author as its another bot
+    if (authorBot && content.match(regexps.botTalkingFull)) talkingBotRefID = authorID;
 
-    const followUpRegex = /talking to <@!?([0-9]+)>/g;
-    const followUpAskAnotherBotRef = userInput.match(followUpRegex);
-    if (followUpAskAnotherBotRef) anotherBotRefID = authorID;
-
-    userInput = content
-      .replace(new RegExp(/<*@([0-9A-Za-z]+)>*/g), '')
-      .replace(new RegExp(/talk(ing)* to /g), '')
-      .trim();
+    const requestingImage = content.match(regexps.txt2img).length > 0;
 
     // only when author is bot and there is another bot we care about
-    if (authorBot && anotherBotRefID == null) return;
+    if (authorBot && talkingBotRefID == null) return;
 
     // may change this to slash commands in the future
     // i'm using regular text commands currently because the bot interacts with text content anyway
-    if (userInput.startsWith('.')) {
-      const args = userInput.substring(1).split(/\s+/g);
-      const cmd = args.shift();
-      switch (cmd) {
-        case 'reset':
-        case 'clear':
-          if (messages[channelID] != null) {
-            // reset conversation
-            const cleared = messages[channelID].length;
-
-            // clear
-            delete messages[channelID];
-
-            if (cleared > 0) {
-              await message.reply({ content: `Cleared conversation of ${cleared} messages` });
-              break;
-            }
-          }
-          await message.reply({ content: 'No messages to clear' });
-          break;
-        case 'help':
-        case '?':
-        case 'h':
-          await message.reply({
-            content: 'Commands:\n- `.reset` `.clear`\n- `.help` `.?` `.h`\n- `.ping`\n- `.model`\n- `.system`',
-          });
-          break;
-        case 'model':
-          await message.reply({
-            content: `Current model: ${model}`,
-          });
-          break;
-        case 'system':
-          await sendSplitReplyMessage(message, `System message:\n\n${systemMessage}`);
-          break;
-        case 'ping':
-          // get ms difference
-          await pingReply(message);
-          break;
-        case '':
-          break;
-        default:
-          await message.reply({ content: 'Unknown command, type `.help` for a list of commands' });
-          break;
-      }
-
-      return;
-    }
+    await handleCommands(content, message, messages, channelID, systemMessage);
 
     if (message.type == MessageType.Default && requiresMention && guild && !content.match(myMentionRegex)) return;
 
@@ -183,27 +253,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
       await guildMembers.fetch();
     }
 
-    userInput = userInput
-      .replace(myMentionRegex, '')
-      .replace(/<#([0-9]+)>/g, (_, id) => {
-        if (guild) {
-          const chn = guildChannels.cache.get(id);
-          if (chn) return `#${chn.name}`;
-        }
-
-        return '#unknown-channel';
-      })
-      .replace(/<@!?([0-9]+)>/g, (_, id) => {
-        if (id == authorID) return authorUsername;
-        if (guild) {
-          const mem = guildMembers.cache.get(id);
-          if (mem) return `@${mem.user.username}`;
-        }
-
-        return '@unknown-user';
-      })
-      .replace(/<:([a-zA-Z0-9_]+):([0-9]+)>/g, (_, name) => `emoji:${name}:`)
-      .trim();
+    let userInput = cleanInputText(content, message);
 
     if (userInput.length == 0) return;
 
@@ -225,7 +275,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
       // context if the message is not a reply
       if (context == null) context = messages[channelID].last?.context;
 
-      if (useInitialPrompt && messages[channelID].length == 0) {
+      if (initialPrompt && messages[channelID].length == 0) {
         userInput = `${initialPrompt}\n\n${userInput}`;
         logDebug('Adding initial prompt to message');
       }
@@ -277,26 +327,43 @@ client.on(Events.MessageCreate, async (message: Message) => {
 
     context = response.filter((e) => e.done && e.context)[0].context;
 
-    // TODO workout if were looping and early out?
     const allContent = messages[channelID].map((x) => x.content).filter((x) => x);
     const duplicates = allContent.filter((item, index) => allContent.indexOf(item) !== index);
+    // TODO workout if were looping and early out?
+    const botChatsCount = messages[channelID].filter((item) => item.botChats).length;
 
-    if (duplicates.length > 0) {
+    if (duplicates.length > 0 || botChatsCount > botChatsCountLimit) {
       logDebug(`Duplicates found are ${JSON.stringify(duplicates)}`);
       messages[channelID].push({
         ...(await messageChannel.send(`Okay were going around in circles stopping....`)),
         context,
+        botChats: false,
       });
-    } else if (anotherBotRefID)
+    } else if (talkingBotRefID)
       messages[channelID].push(
         ...(
-          await sendSplitChannelMessage(messageChannel, `talking to <@${anotherBotRefID}> ${prefix}${responseText}`)
-        ).map((x) => ({ ...x, context }))
+          await sendSplitChannelMessage(messageChannel, `talk to <@${talkingBotRefID}> ${prefix}${responseText}`)
+        ).map((x) => ({ ...x, context, botChats: true }))
       );
     else
       messages[channelID].push(
-        ...(await sendSplitReplyMessage(message, `${prefix}${responseText}`)).map((x) => ({ ...x, context }))
+        ...(await sendSplitReplyMessage(message, `${prefix}${responseText}`)).map((x) => ({
+          ...x,
+          context,
+          botChats: false,
+        }))
       );
+
+    if (requestingImage) {
+      const last = messages[channelID][messages[channelID].length - 1];
+      messages[channelID].push(
+        ...(await sendSplitChannelMessage(messageChannel, `/txt2img prompt:${last.content}`)).map((x) => ({
+          ...x,
+          context,
+          botChats: false,
+        }))
+      );
+    }
   } catch (error) {
     if (typing)
       try {

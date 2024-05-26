@@ -18,7 +18,7 @@ compose-down:
 
 #  Run the local node project with make and without docker
 local:
-	$(MAKE) setup_env && npm i && npm run build && node ./index.js
+	$(MAKE) setup_env && yarn && npm run build && node ./index.js
 
 # This copies the .env.example (source) file to the .env (destination) file location
 # The -n or no clobber means it will not overwrite the .env file if it already exists.
